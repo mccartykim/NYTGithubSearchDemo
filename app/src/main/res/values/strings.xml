@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">NYT Github Search Demo</string>
+    <string name="github_org">Github Org</string>
+    <string name="search">Search</string>
+</resources>

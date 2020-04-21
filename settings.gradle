@@ -1,0 +1,2 @@
+rootProject.name='NYT Github Search Demo'
+include ':app'
