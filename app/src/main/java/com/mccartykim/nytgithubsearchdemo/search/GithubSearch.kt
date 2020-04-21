@@ -1,6 +1,5 @@
 package com.mccartykim.nytgithubsearchdemo.search
 
-import android.accounts.NetworkErrorException
 import com.squareup.moshi.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -9,8 +8,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okio.IOException
-import java.lang.IllegalStateException
-import java.security.acl.Owner
 
 /**
  *
@@ -58,7 +55,7 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
      * Some orgs might have so many repos that pagination is an issue, which is tedious to deal with if we only ever want
      a few listings
      */
-    fun buildMostStarsSearchPath(orgName: CharSequence, count: Int = 3): HttpUrl {
+    private fun buildMostStarsSearchPath(orgName: CharSequence, count: Int = 3): HttpUrl {
         return baseUrl.newBuilder()
             .addPathSegment("search")
             .addPathSegment("repositories")
@@ -104,6 +101,5 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
 
     companion object {
         const val GITHUB_HOST_BASE_URL = "https://api.github.com/"
-        const val NOT_FOUND_OR_PRIVATE_STATUS = "422"
     }
 }
