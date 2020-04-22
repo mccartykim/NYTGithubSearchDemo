@@ -20,7 +20,9 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
     private val baseUrl: HttpUrl = GITHUB_HOST_BASE_URL.toHttpUrlOrNull()!!
 
 
-    // Idea: predictive search for orgnames? Limit reqs to 10/minutes, perhaps using interceptor. Might be a nice RxJava idea
+    // Idea: predictive search for orgnames? Limit reqs to less than 10/minute, perhaps using interceptor. Might be a nice RxJava idea
+    // We can't search by prefix, but we could instead get the 1,000 most popular orgs, and populate a list or trie or something like that with them
+
 
     // blocking get, should not be run on main thread
     // For production, I'd want better logging
