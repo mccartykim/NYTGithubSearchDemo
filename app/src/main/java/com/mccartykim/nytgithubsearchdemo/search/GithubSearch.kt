@@ -47,7 +47,7 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
                     }
                 }?: throw IOException("Response was successful but body is null, which should not happen with this API")
             }
-            else -> throw IOException("Network Error: ${response.headers["status"]?: "No status code found"}")
+            else -> throw IOException(response.headers["status"]?: "-1 No status code found")
         }
     }
 

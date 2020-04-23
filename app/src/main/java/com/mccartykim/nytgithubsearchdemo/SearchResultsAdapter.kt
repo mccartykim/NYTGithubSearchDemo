@@ -1,17 +1,18 @@
 package com.mccartykim.nytgithubsearchdemo
 
-import android.graphics.Color
-import android.net.Uri
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
-import androidx.browser.customtabs.CustomTabsIntent
 import androidx.recyclerview.widget.RecyclerView
+import com.mccartykim.nytgithubsearchdemo.search.Listing
 import com.mccartykim.nytgithubsearchdemo.search.RepoListing
 
-class SearchResultsAdapter(private val dataSet: List<RepoListing>) : RecyclerView.Adapter<SearchResultViewHolder>() {
+class SearchResultsAdapter : RecyclerView.Adapter<SearchResultViewHolder>() {
+    var dataSet: List<Listing> = listOf()
+
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SearchResultViewHolder {
         val searchResultView: ViewGroup = LayoutInflater.from(parent.context)
             .inflate(R.layout.search_result_item, parent, false) as ViewGroup
@@ -31,27 +32,28 @@ class SearchResultViewHolder(private val resultGroup: ViewGroup): RecyclerView.V
     private val repoStars = resultGroup.findViewById<TextView>(R.id.repo_star_count)
 
     // TODO MVVMify this
-    fun updateFromRepoListing(repoListing: RepoListing) {
+    fun updateFromRepoListing(listing: Listing) {
         // TODO consider adding icon, perhaps with picasso?
-        repoTitle.text = repoListing.name
+        repoTitle.text = listing.name
         Log.d("SearchResultViewholder", "updating")
         // Probably shouldn't do that in the view layer vvv
-        repoDescription.text = repoListing.description
         when {
-            repoListing.description.isNullOrBlank() -> repoDescription.visibility = View.INVISIBLE
-            else -> repoDescription.visibility = View.VISIBLE
+            listing.description.isNullOrBlank() -> repoDescription.visibility = View.INVISIBLE
+            else -> {
+                repoDescription.visibility =  View.VISIBLE
+                repoDescription.text = listing.description
+            }
         }
-        // yuck
-        repoStars.text = resultGroup.resources.getString(R.string.star_count, repoListing.stargazers_count)
-
-        resultGroup.setOnClickListener {
-            CustomTabsIntent.Builder()
-                .setToolbarColor(Color.rgb(201, 66, 128))
-                .setShowTitle(true)
-                .setStartAnimations(resultGroup.context, android.R.anim.slide_out_right, android.R.anim.slide_in_left)
-                .setExitAnimations(resultGroup.context, android.R.anim.slide_in_left, android.R.anim.slide_out_right)
-                .build()
-                .launchUrl(resultGroup.context, Uri.parse(repoListing.html_url))
+        when (listing) {
+            is RepoListing -> {
+                repoStars.visibility = View.VISIBLE
+                repoStars.text =
+                    resultGroup.resources.getString(R.string.star_count, listing.stargazers_count)
+                resultGroup.setOnClickListener { MainViewModel.viewSubject.onNext(ListingClicked(layoutPosition)) }
+            }
+            else -> {
+                repoStars.visibility = View.GONE
+            }
         }
     }
 }
