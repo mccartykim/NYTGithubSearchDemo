@@ -9,6 +9,7 @@ import android.widget.Button
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.*
+import androidx.core.content.ContextCompat
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -29,10 +30,10 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
 
     private val customTabsIntent by lazy {
         CustomTabsIntent.Builder()
-            .setToolbarColor(Color.rgb(201, 66, 128))
+            .setToolbarColor(ContextCompat.getColor(this, R.color.colorCustomMagenta))
             .setShowTitle(true)
-            .setStartAnimations(this, android.R.anim.slide_in_left, android.R.anim.slide_in_left)
-            .setExitAnimations(this, android.R.anim.slide_out_right, android.R.anim.slide_out_right)
+            .setStartAnimations(this, android.R.anim.fade_in, android.R.anim.fade_out)
+            .setExitAnimations(this, android.R.anim.fade_in, android.R.anim.fade_out)
             .build()
     }
 
