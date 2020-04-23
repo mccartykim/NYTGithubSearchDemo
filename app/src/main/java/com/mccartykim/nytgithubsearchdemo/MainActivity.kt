@@ -8,12 +8,11 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import androidx.appcompat.app.AppCompatActivity
-import androidx.browser.customtabs.CustomTabsClient
-import androidx.browser.customtabs.CustomTabsIntent
-import androidx.browser.customtabs.CustomTabsServiceConnection
+import androidx.browser.customtabs.*
 import androidx.core.widget.addTextChangedListener
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.mccartykim.nytgithubsearchdemo.search.RepoListing
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.subjects.PublishSubject
 import kotlinx.coroutines.*
@@ -26,6 +25,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
     private lateinit var recyclerViewAdapter: SearchResultsAdapter
 
     private var customTabsClient: CustomTabsClient? = null
+    private var customTabsSession: CustomTabsSession? = null
 
     private val customTabsIntent by lazy {
         CustomTabsIntent.Builder()
@@ -68,6 +68,9 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
             MainViewModel.viewModelObservable.ofType(NewResults::class.java).subscribe {
                 recyclerViewAdapter.dataSet = it.results
                 recyclerViewAdapter.notifyDataSetChanged()
+                it.results.firstOrNull()?.let {
+                    if (it is RepoListing) customTabsSession?.mayLaunchUrl(Uri.parse(it.html_url), Bundle.EMPTY, emptyList())
+                }
             },
             MainViewModel.viewModelObservable.ofType(ClearSearchbar::class.java).subscribe { searchBar.text.clear() },
             MainViewModel.viewModelObservable.ofType(EnableSubmit::class.java).subscribe { submitBtn.isEnabled = true },
@@ -96,6 +99,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
         }
         CustomTabsClient.bindCustomTabsService(this, "com.android.chrome", customTabsServiceConnection)
         if (customTabsClient != null) {
+            customTabsClient?.let { customTabsSession = it.newSession(CustomTabsCallback()) }
             return
         } else {
             startChromeServiceConnectionAndWarmup(tries - 1)
