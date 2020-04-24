@@ -60,7 +60,7 @@ class SearchResultViewHolder(private val resultGroup: ViewGroup): RecyclerView.V
             }
         }
         repoTitle.text = listing.name
-        resultGroup.setOnClickListener { GithubSearchViewModel.resultItemClicked(adapterPosition) }
+        cardView.setOnClickListener { GithubSearchViewModel.resultItemClicked(adapterPosition) }
     }
 }
 
