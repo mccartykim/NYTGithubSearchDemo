@@ -1,23 +1,20 @@
 package com.mccartykim.nytgithubsearchdemo
 
 import android.util.Log
-import android.view.View
 import androidx.annotation.VisibleForTesting
 import androidx.databinding.BaseObservable
 import androidx.databinding.Bindable
 import com.mccartykim.nytgithubsearchdemo.search.*
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
 import io.reactivex.rxjava3.subjects.PublishSubject
-import kotlinx.coroutines.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import okio.IOException
 
-object GithubSearchViewModel: BaseObservable() {
-    private val searcher = GithubSearch()
+class GithubSearchViewModel: BaseObservable() {
+    @VisibleForTesting
+    var searcher = GithubSearch()
 
-    private val viewModelSubject: PublishSubject<ViewModelEvents> = PublishSubject.create()
-
-    val viewModelObservable: Observable<ViewModelEvents> = viewModelSubject.observeOn(AndroidSchedulers.mainThread())
+    val viewModelSubject: PublishSubject<ViewModelEvents> = PublishSubject.create()
 
     @get: Bindable
     var suggestedOrgs: List<String> = emptyList()
@@ -56,7 +53,7 @@ object GithubSearchViewModel: BaseObservable() {
 
     @get:Bindable
     var searchResults: List<Listing>  = emptyList()
-        private set(value) {
+        set(value) {
             if (field != value) {
                 field = value
                 notifyPropertyChanged(BR.searchResults)
@@ -78,11 +75,13 @@ object GithubSearchViewModel: BaseObservable() {
             .map { it.login }
     }
 
-    private suspend fun submit(searchBarText: String) {
+    @VisibleForTesting
+    suspend fun submit(searchBarText: String) {
         searchResults = when {
            searchBarText.isNotBlank() -> {
                try {
-                   withContext(Dispatchers.IO) { searcher.getReposByStars(searchBarText) }
+                   val results = searcher.getReposByStars(searchBarText)
+                   if (results.isEmpty()) listOf(EmptyListing) else results
                } catch (e: IOException) {
                    Log.d("MainViewModel", e.message?: "IO Exception with no message")
                    listOf(ErrorListing)
@@ -99,7 +98,7 @@ object GithubSearchViewModel: BaseObservable() {
     }
 
     fun resultItemClicked(adapterPosition: Int) {
-        when(val listing = searchResults[adapterPosition]) {
+        when(val listing = searchResults.getOrNull(adapterPosition)) {
             is RepoListing -> viewModelSubject.onNext(LoadGithubPage(listing.html_url))
             else -> { /* ignore */ }
         }

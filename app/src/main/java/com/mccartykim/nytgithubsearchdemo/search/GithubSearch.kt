@@ -3,6 +3,7 @@ package com.mccartykim.nytgithubsearchdemo.search
 import android.util.Log
 import com.squareup.moshi.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -10,6 +11,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okio.IOException
+import java.util.concurrent.TimeUnit
 
 class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
     // Since this is using a hardcoded string I know is a valid URL,
@@ -66,18 +68,24 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
      * @return T associated with JsonAdapter, or null if status code says resource isn't found
      */
     private suspend fun <T>getModelFromResponse(adapter: JsonAdapter<T>, response: Response): T? {
-        val body = response.body
-        return withContext(Dispatchers.IO) {
-            when {
-                response.isSuccessful && body != null -> {
-                    body.use {
-                        JsonReader.of(it.source()).use {
-                                reader -> adapter.fromJson(reader)
-                        }?: throw JsonDataException("Github Search Result somehow doesn't have an items field")
+        response.use {
+            val body = response.body
+            return withContext(Dispatchers.IO) {
+                when {
+                    response.isSuccessful && body != null -> {
+                        body.use {
+                            JsonReader.of(it.source()).use { reader ->
+                                adapter.fromJson(reader)
+                            }
+                                ?: throw JsonDataException("Github Search Result somehow doesn't have an items field")
+                        }
                     }
+                    response.headers.names()
+                        .contains("status") && response.headers["status"]!!.startsWith("4") -> null
+                    else -> throw IOException(
+                        response.headers["status"] ?: "-1 No status code found"
+                    )
                 }
-                response.headers.names().contains("status") && response.headers["status"]!!.startsWith("4") -> null
-                else -> throw IOException(response.headers["status"] ?: "-1 No status code found")
             }
         }
     }

@@ -11,6 +11,8 @@ import androidx.databinding.DataBindingUtil
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.mccartykim.nytgithubsearchdemo.databinding.ActivityMainBinding
+import com.mccartykim.nytgithubsearchdemo.search.Listing
+import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import kotlinx.coroutines.*
 
@@ -19,6 +21,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
     private var customTabsClient: CustomTabsClient? = null
     private var customTabsSession: CustomTabsSession? = null
 
+    private val viewModel = GithubSearchViewModel()
     private val customTabsIntent: CustomTabsIntent by lazy {
         // try to use our session, assuming it set up correctly, otherwise create a default builder
         (customTabsSession?.let {CustomTabsIntent.Builder(it)}?: CustomTabsIntent.Builder())
@@ -33,23 +36,31 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val binding = DataBindingUtil.setContentView<ActivityMainBinding>(this, R.layout.activity_main)
-        binding.viewmodel = GithubSearchViewModel
+        // I'd prefer to decouple the viewmodel more but for the sake of a working demo I've used simple parcelization
+        savedInstanceState?.getParcelableArray("RESULTS")?.let {
+            viewModel.searchResults = it.toList() as List<Listing>
+        }
+        savedInstanceState?.getStringArrayList("SUGGESTIONS")?.let {
+            viewModel.suggestedOrgs = it.toList()
+        }?: launch { viewModel.loadSuggestions() }
 
-        launch { GithubSearchViewModel.loadSuggestions() }
+        val binding = DataBindingUtil.setContentView<ActivityMainBinding>(this, R.layout.activity_main)
+        binding.viewmodel = viewModel
+
         launch { warmupChrome() }
 
         findViewById<RecyclerView>(R.id.results_recycler_view).apply {
             setHasFixedSize(false)
             layoutManager = LinearLayoutManager(this@MainActivity)
-            adapter = SearchResultsRecyclerViewAdapter()
+            adapter = SearchResultsRecyclerViewAdapter(viewModel)
         }
 
         // I wrote a draft primarily around RxJava but then decided to give data bindings a try
         // I don't like having intents live outside of a view if I can help it, so I kept the observable
         // for this on the philosophy that the view model could serve this to other url-consuming/rendering views
         disposable.addAll(
-            GithubSearchViewModel.viewModelObservable
+            viewModel.viewModelSubject
+                .observeOn(AndroidSchedulers.mainThread())
                 .subscribe {
                     when (it) {
                         is PreloadTopLink -> customTabsSession?.mayLaunchUrl(Uri.parse(it.url), Bundle.EMPTY, listOf())
@@ -61,7 +72,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
     }
 
     // attempt to warm up the ChromeCustomTabsService
-    private suspend fun startChromeServiceConnectionAndWarmup(tries: Int = 3) {
+    private suspend fun warmupChrome(tries: Int = 3) {
         if (tries <= 0) {
             return
         }
@@ -83,12 +94,14 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
             customTabsClient?.let { customTabsSession = it.newSession(CustomTabsCallback()) }
             return
         } else {
-            startChromeServiceConnectionAndWarmup(tries - 1)
+            warmupChrome(tries - 1)
         }
     }
 
-    private suspend fun warmupChrome() {
-        startChromeServiceConnectionAndWarmup()
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putParcelableArray("RESULTS", viewModel.searchResults.toTypedArray())
+        outState.putStringArray("SUGGESTIONS", viewModel.suggestedOrgs.toTypedArray())
     }
 
     override fun onDestroy() {

@@ -18,7 +18,7 @@ import org.junit.Test
 class GithubSearchTest {
 
     private var mockJsonString = REPO_SEARCH_RESULT
-    private val mockResponse: Response = mockk{
+    private val mockResponse: Response = mockk(relaxUnitFun = true) {
         every { headers } returns mockk(relaxed = true) {
             every { headers.names() } returns setOf("status")
             every { headers["status"] } returns "200"
