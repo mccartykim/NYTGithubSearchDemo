@@ -1,5 +1,6 @@
 package com.mccartykim.nytgithubsearchdemo.search
 
+import android.util.Log
 import com.squareup.moshi.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -7,12 +8,9 @@ import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okio.IOException
 
-/**
- *
- */
-// TODO If I add dagger, this would be a good place to demo it
 class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
     // Since this is using a hardcoded string I know is a valid URL,
     // and I'm in a hurry, I'd rather this fatally crash with a doublebang so I can fix it now
@@ -23,31 +21,64 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
     // Idea: predictive search for orgnames? Limit reqs to less than 10/minute, perhaps using interceptor. Might be a nice RxJava idea
     // We can't search by prefix, but we could instead get the 1,000 most popular orgs, and populate a list or trie or something like that with them
 
-
-    // blocking get, should not be run on main thread
-    // For production, I'd want better logging
-    // TODO get different types of error to the view, IE no results, network error
-    suspend fun getReposByStars(orgName: CharSequence, count: Int = 3): List<RepoListing> {
-        val url = buildMostStarsSearchPath(orgName, count)
+    /**
+     * Get organizations that own the most popular repositories
+     * NB: Limit 100 candidate repos, pagination is not implemented
+     *
+     * @param count number of repositories to look at, and then filter for those owned by organizations
+     * @return list of github orgs, which are a type of user
+     */
+    suspend fun getMostPopularOrgs(count: Int = 100): List<GithubUser> {
+        val url = buildMostPopularReposSearchPath(count)
+        Log.d("URL_MostpopularOrgs", url.toString())
         val request = Request.Builder().url(url).build()
 
         val moshi = Moshi.Builder().build()
-        val adapter: JsonAdapter<RepoSearchResults> = moshi.adapter(
-            RepoSearchResults::class.java)
+        val adapter: JsonAdapter<RepoSearchResults> = RepoSearchResultsJsonAdapter(moshi)
 
         val response = withContext(Dispatchers.IO) {
             httpClient.newCall(request).execute()
         }
 
-        return when {
-            response.isSuccessful -> {
-                response.body?.use {
-                    JsonReader.of(it.source()).use {
-                        withContext(Dispatchers.IO) { adapter.fromJson(it) }?.items ?: throw JsonDataException("Github Repo Search somehow doesn't have an items field")
+        val repos = getModelFromResponse(adapter, response)?.items?:emptyList()
+        return repos.map { it.owner }.filter { it.type == UserType.Organization }.distinctBy { it.login }
+    }
+
+
+    // blocking get, should not be run on main thread
+    // For production, I'd want better logging
+    suspend fun getReposByStars(orgName: CharSequence, count: Int = 3): List<RepoListing> {
+        val url = buildMostStarsFromOrgSearchPath(orgName, count)
+        Log.d("URL_MostpopRepoForOrg", url.toString())
+        val request = Request.Builder().url(url).build()
+
+        val moshi = Moshi.Builder().build()
+        val adapter: JsonAdapter<RepoSearchResults> = RepoSearchResultsJsonAdapter(moshi)
+
+        val response = withContext(Dispatchers.IO) {
+            httpClient.newCall(request).execute()
+        }
+
+        return getModelFromResponse(adapter, response)?.items?: emptyList()
+    }
+
+    /**
+     * @return T associated with JsonAdapter, or null if status code says resource isn't found
+     */
+    private suspend fun <T>getModelFromResponse(adapter: JsonAdapter<T>, response: Response): T? {
+        val body = response.body
+        return withContext(Dispatchers.IO) {
+            when {
+                response.isSuccessful && body != null -> {
+                    body.use {
+                        JsonReader.of(it.source()).use {
+                                reader -> adapter.fromJson(reader)
+                        }?: throw JsonDataException("Github Search Result somehow doesn't have an items field")
                     }
-                }?: throw IOException("Response was successful but body is null, which should not happen with this API")
+                }
+                response.headers.names().contains("status") && response.headers["status"]!!.startsWith("4") -> null
+                else -> throw IOException(response.headers["status"] ?: "-1 No status code found")
             }
-            else -> throw IOException(response.headers["status"]?: "-1 No status code found")
         }
     }
 
@@ -57,7 +88,7 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
      * Some orgs might have so many repos that pagination is an issue, which is tedious to deal with if we only ever want
      a few listings
      */
-    private fun buildMostStarsSearchPath(orgName: CharSequence, count: Int = 3): HttpUrl {
+    private fun buildMostStarsFromOrgSearchPath(orgName: CharSequence, count: Int = 3): HttpUrl {
         return baseUrl.newBuilder()
             .addPathSegment("search")
             .addPathSegment("repositories")
@@ -68,11 +99,13 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
             .build()
     }
 
+    // Dead code left to show earlier approach, before I read more about the options with Github's search API
+    // I realized it's better to trust the API to deliver correct and sorted repos, assuming I rate-limit my requests
+
     // blocking get, will run offthread via coroutines
     // I'm aware that OkHttp itself offers asynchronous access!
     // I just always wanted to try coroutines
     // For production, I'd want better logging
-    @Deprecated("earlier implementation")
     fun getRepos(orgName: String): List<RepoListing>? {
         val url = buildOrgReposPath(orgName) ?: run { return null }
         val request = Request.Builder().url(url).build()
@@ -93,13 +126,22 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
 
     // Dead code left to show earlier approach, before I read more about the options with Github's search API
     // I realized it's better to trust the API to deliver correct and sorted repos, assuming I rate-limit my requests
-    private fun buildOrgReposPath(orgName: String): HttpUrl? {
-        return baseUrl.newBuilder()
+    private fun buildOrgReposPath(orgName: String): HttpUrl? =
+        baseUrl.newBuilder()
             .addPathSegment("orgs")
-            .addPathSegment(orgName)
+            .addEncodedPathSegment(orgName)
             .addPathSegment("repos")
             .build()
-    }
+
+    private fun buildMostPopularReposSearchPath(count: Int): HttpUrl =
+        baseUrl.newBuilder()
+            .addPathSegment("search")
+            .addPathSegment("repositories")
+            .addQueryParameter("q", "stars:>1000")
+            .addQueryParameter("sort", "stars")
+            .addQueryParameter("order", "desc")
+            .addQueryParameter("per_page", count.toString())
+            .build()
 
     companion object {
         const val GITHUB_HOST_BASE_URL = "https://api.github.com/"

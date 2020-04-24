@@ -1,17 +1,26 @@
 package com.mccartykim.nytgithubsearchdemo
 
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import androidx.cardview.widget.CardView
 import androidx.recyclerview.widget.RecyclerView
 import com.mccartykim.nytgithubsearchdemo.search.Listing
 import com.mccartykim.nytgithubsearchdemo.search.RepoListing
 
-class SearchResultsAdapter : RecyclerView.Adapter<SearchResultViewHolder>() {
-    var dataSet: List<Listing> = listOf()
+class SearchResultsRecyclerViewAdapter : RecyclerView.Adapter<SearchResultViewHolder>() {
 
+    /*
+        With a dataset that partially changes, I would not replace the entire list and call "notifyDataSetChanged."
+        However, at just three items that will likely be different every time, this isn't wasteful.
+        I mostly chose to use this instead of a ListView because I wanted to demo recyclerviews
+     */
+    var dataSet: List<Listing> = GithubSearchViewModel.searchResults
+        set(value) {
+            field = value
+            notifyDataSetChanged()
+        }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SearchResultViewHolder {
         val searchResultView: ViewGroup = LayoutInflater.from(parent.context)
@@ -27,16 +36,22 @@ class SearchResultsAdapter : RecyclerView.Adapter<SearchResultViewHolder>() {
 }
 
 class SearchResultViewHolder(private val resultGroup: ViewGroup): RecyclerView.ViewHolder(resultGroup) {
-    private val repoTitle = resultGroup.findViewById<TextView>(R.id.repo_title)
-    private val repoDescription = resultGroup.findViewById<TextView>(R.id.repo_description)
+    private val repoTitle = resultGroup.findViewById<TextView>(R.id.listing_title)
+    private val repoDescription = resultGroup.findViewById<TextView>(R.id.listing_description)
     private val repoStars = resultGroup.findViewById<TextView>(R.id.repo_star_count)
+    private val cardView = resultGroup.findViewById<CardView>(R.id.result_card)
 
-    // TODO MVVMify this
     fun updateFromRepoListing(listing: Listing) {
-        // TODO consider adding icon, perhaps with picasso?
-        repoTitle.text = listing.name
-        Log.d("SearchResultViewholder", "updating")
-        // Probably shouldn't do that in the view layer vvv
+        when (listing) {
+            is RepoListing -> {
+                repoStars.visibility = View.VISIBLE
+                repoStars.text =
+                    resultGroup.resources.getString(R.string.star_count, listing.stargazers_count)
+            }
+            else -> {
+                repoStars.visibility = View.GONE
+            }
+        }
         when {
             listing.description.isNullOrBlank() -> repoDescription.visibility = View.INVISIBLE
             else -> {
@@ -44,16 +59,8 @@ class SearchResultViewHolder(private val resultGroup: ViewGroup): RecyclerView.V
                 repoDescription.text = listing.description
             }
         }
-        when (listing) {
-            is RepoListing -> {
-                repoStars.visibility = View.VISIBLE
-                repoStars.text =
-                    resultGroup.resources.getString(R.string.star_count, listing.stargazers_count)
-                resultGroup.setOnClickListener { MainViewModel.viewSubject.onNext(ListingClicked(layoutPosition)) }
-            }
-            else -> {
-                repoStars.visibility = View.GONE
-            }
-        }
+        repoTitle.text = listing.name
+        resultGroup.setOnClickListener { GithubSearchViewModel.resultItemClicked(adapterPosition) }
     }
 }
+

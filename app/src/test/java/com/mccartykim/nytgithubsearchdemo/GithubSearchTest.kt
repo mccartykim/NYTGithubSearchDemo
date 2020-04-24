@@ -1,6 +1,7 @@
 package com.mccartykim.nytgithubsearchdemo
 
 import com.mccartykim.nytgithubsearchdemo.search.GithubSearch
+import com.mccartykim.nytgithubsearchdemo.search.GithubUser
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
@@ -18,7 +19,10 @@ class GithubSearchTest {
 
     private var mockJsonString = REPO_SEARCH_RESULT
     private val mockResponse: Response = mockk{
-        every { headers } returns mockk(relaxed = true)
+        every { headers } returns mockk(relaxed = true) {
+            every { headers.names() } returns setOf("status")
+            every { headers["status"] } returns "200"
+        }
         every { isSuccessful } returns true
         every { body } returns mockk(relaxUnitFun = true) {
             every { contentType() } returns mockk {
@@ -69,6 +73,7 @@ class GithubSearchTest {
     fun `getReposByStars should thrown an IOException if result is not successful`() {
         // arrange
         every { mockResponse.isSuccessful } returns false
+        every { mockResponse.headers["status"] } returns "500 Internal Error"
         val search = GithubSearch(
             mockOkHttpClient
         )
@@ -79,7 +84,7 @@ class GithubSearchTest {
         // assert
         assertThat(thrown)
             .isInstanceOf(IOException::class.java)
-            .hasMessageContaining("Network Error: ")
+            .hasMessageStartingWith("500")
     }
 
     @Test
@@ -100,12 +105,28 @@ class GithubSearchTest {
 
     @Test
     fun `getRepoByStars should return empty list with zero result response`() {
+        // Arrange
         mockJsonString = EMPTY_REPO_SEARCH_RESULT
         val search = GithubSearch(mockOkHttpClient)
 
+        // Act
         val result = runBlocking { search.getReposByStars("mccartykim") }
+
+        //Assert
         assertThat(result)
             .isEmpty()
     }
 
+    @Test
+    fun getMostPopularOrgs() {
+        val searcher = GithubSearch(mockOkHttpClient)
+
+        val result = runBlocking { searcher.getMostPopularOrgs() }
+
+        assertThat(result)
+            .isNotEmpty()
+            .hasSize(1)
+
+        assertThat(result.find { it.login == "octokit" }).isNotNull()
+    }
 }
