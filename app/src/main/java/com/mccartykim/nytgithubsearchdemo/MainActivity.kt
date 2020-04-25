@@ -42,7 +42,7 @@ class MainActivity : AppCompatActivity(), CoroutineScope by MainScope() {
         }
         savedInstanceState?.getStringArrayList("SUGGESTIONS")?.let {
             viewModel.suggestedOrgs = it.toList()
-        }?: launch { viewModel.loadSuggestions() }
+        }?:launch { viewModel.loadSuggestions() }
 
         val binding = DataBindingUtil.setContentView<ActivityMainBinding>(this, R.layout.activity_main)
         binding.viewmodel = viewModel

@@ -30,26 +30,25 @@ class GithubSearchViewModel: BaseObservable() {
     var submitEnabled = false
 
     @get:Bindable
+    var isLoading = false
+    set(value) {
+        if (field != value) {
+            field = value
+            notifyPropertyChanged(BR.loading)
+        }
+    }
+
+    @get:Bindable
     var query: String = ""
         @Bindable
         set(value) {
             if (field != value) {
                 field = value
                 notifyPropertyChanged(BR.query)
-                when (validateGithubUsername(field)) {
-                    true -> submitEnabled = true
-                    false -> {
-                        submitEnabled = false
-                    }
-                }
-                notifyPropertyChanged(BR.submitEnabled)
+                onQueryChanged()
             }
         }
 
-    // Public domain regex found at https://github.com/shinnn/github-username-regex while looking up login validation
-    val githubLoginRegex = Regex("""[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}""")
-    @VisibleForTesting
-    fun validateGithubUsername(name: String): Boolean = name.matches(githubLoginRegex)
 
     @get:Bindable
     var searchResults: List<Listing>  = emptyList()
@@ -62,13 +61,29 @@ class GithubSearchViewModel: BaseObservable() {
 
     fun submit() {
         if (query.isNotBlank()) {
-            if (validateGithubUsername(query)) {
-                GlobalScope.launch { submit(query) }
+            val trimmedAndLowercase = query.trim().toLowerCase()
+            if (validateGithubUsername(trimmedAndLowercase)) {
+                GlobalScope.launch { submit(trimmedAndLowercase) }
             } else {
                 viewModelSubject.onNext(Warning("Github names must contain only alphanumeric characters and hyphens, and be under 40 characters"))
             }
         }
     }
+
+    private fun onQueryChanged() {
+        when (validateGithubUsername(query.toLowerCase().trim())) {
+            true -> submitEnabled = true
+            false -> {
+                submitEnabled = false
+            }
+        }
+        notifyPropertyChanged(BR.submitEnabled)
+    }
+
+    // Public domain regex found at https://github.com/shinnn/github-username-regex while looking up login validation
+    val githubLoginRegex = Regex("""[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}""")
+    @VisibleForTesting
+    fun validateGithubUsername(name: String): Boolean = name.matches(githubLoginRegex)
 
     suspend fun loadSuggestions() {
         suggestedOrgs = searcher.getMostPopularOrgs()
@@ -77,6 +92,7 @@ class GithubSearchViewModel: BaseObservable() {
 
     @VisibleForTesting
     suspend fun submit(searchBarText: String) {
+        isLoading = true
         searchResults = when {
            searchBarText.isNotBlank() -> {
                try {
@@ -91,7 +107,10 @@ class GithubSearchViewModel: BaseObservable() {
                emptyList()
            }
         }
-        if (searchResults.isNotEmpty() && searchResults.first() !is ErrorListing) {
+        isLoading = false
+        val firstResult = searchResults.firstOrNull()
+        if (firstResult is RepoListing) {
+            viewModelSubject.onNext(PreloadTopLink(firstResult.html_url))
             query = ""
             submitEnabled = false
         }

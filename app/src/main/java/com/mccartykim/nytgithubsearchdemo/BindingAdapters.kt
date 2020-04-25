@@ -1,6 +1,7 @@
 package com.mccartykim.nytgithubsearchdemo
 
 import android.util.Log
+import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.*
 import androidx.databinding.BindingAdapter
@@ -43,5 +44,13 @@ fun setData(view: RecyclerView, data: List<Listing>){
         if (this is SearchResultsRecyclerViewAdapter) {
             dataSet = data
         }
+    }
+}
+
+@BindingAdapter("hiding")
+fun isHiding(view: View, isHiding: Boolean) {
+    when (isHiding) {
+        true -> view.visibility = View.GONE
+        else -> view.visibility = View.VISIBLE
     }
 }

@@ -1,9 +1,10 @@
 package com.mccartykim.nytgithubsearchdemo
 
 import com.mccartykim.nytgithubsearchdemo.search.GithubSearch
-import com.mccartykim.nytgithubsearchdemo.search.GithubUser
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.Call
 import okhttp3.OkHttpClient
@@ -14,6 +15,7 @@ import okio.source
 import org.assertj.core.api.Assertions.assertThat
 import org.assertj.core.api.Assertions.catchThrowable
 import org.junit.Test
+import kotlin.system.measureTimeMillis
 
 class GithubSearchTest {
 
@@ -54,7 +56,7 @@ class GithubSearchTest {
 
         // assert
         assertThat(result)
-            .isNotNull()
+            .isNotNull
             .hasSize(3) // matches example string from real github results
 
         assertThat(result)
@@ -118,15 +120,49 @@ class GithubSearchTest {
     }
 
     @Test
-    fun getMostPopularOrgs() {
+    fun `getMostPopularOrgs should return a list of GitHub users`() {
         val searcher = GithubSearch(mockOkHttpClient)
 
         val result = runBlocking { searcher.getMostPopularOrgs() }
 
         assertThat(result)
-            .isNotEmpty()
+            .isNotEmpty
             .hasSize(1)
 
-        assertThat(result.find { it.login == "octokit" }).isNotNull()
+        assertThat(result.find { it.login == "octokit" }).isNotNull
+    }
+
+    @Test
+    fun `executeRequest - Rate limiting should allow a request if no recent request`() {
+        val searcher = GithubSearch(mockOkHttpClient)
+
+        var wait = System.currentTimeMillis()
+        val response = runBlocking { searcher.executeRequest(mockk()) }
+        wait = System.currentTimeMillis() - wait
+        assertThat(response).isNotNull
+        assertThat(wait).isLessThan(100)
+    }
+
+    @Test
+    fun `executeRequest - Rate limiting should allow a request if no recent request, and delay one request`() {
+        val searcher = GithubSearch(mockOkHttpClient)
+        runBlocking { searcher.executeRequest(mockk()) }
+        val wait = measureTimeMillis { val response = runBlocking { searcher.executeRequest(mockk()) } }
+
+        assertThat(wait).isGreaterThan(1500)
+    }
+
+    @Test
+    fun `executeRequest - Rate limiting should allow a request if no recent request, delay one request, and immediately return null if waiting on a previous request`() {
+        val searcher = GithubSearch(mockOkHttpClient)
+        GlobalScope.launch { searcher.executeRequest(mockk()) }
+        Thread.sleep(100)
+        GlobalScope.launch { searcher.executeRequest(mockk()) }
+        Thread.sleep(100)
+        var response: Response? = null
+        val wait = measureTimeMillis { response = runBlocking { searcher.executeRequest(mockk())  } }
+
+        assertThat(wait).isLessThan(100)
+        assertThat(response).isNull()
     }
 }

@@ -2,6 +2,7 @@ package com.mccartykim.nytgithubsearchdemo
 
 import com.mccartykim.nytgithubsearchdemo.search.*
 import io.mockk.*
+import io.mockk.impl.annotations.SpyK
 import kotlinx.coroutines.runBlocking
 import okio.IOException
 import org.assertj.core.api.Assertions.assertThat
@@ -113,10 +114,35 @@ class GithubSearchViewModelTest {
         // click first item
         viewModel.resultItemClicked(0)
 
-        val event = slot<ViewModelEvents>()
-        verify { nopConsumer(capture(event)) }
-        assertThat(event.captured).isInstanceOf(LoadGithubPage::class.java)
-        assertThat((event.captured as LoadGithubPage).url).isEqualTo("https://example.net")
+        val events: MutableList<ViewModelEvents> = mutableListOf()
+        verify { nopConsumer(capture(events)) }
+        assertThat(events.any { it is LoadGithubPage })
+        assertThat((events.find{ it is LoadGithubPage } as LoadGithubPage).url).isEqualTo("https://example.net")
+    }
+
+    @Test
+    fun `On inputting a valid query and sending submit and receiving results, send message to preload top result`() {
+        // Arrange
+        mockReposByStars = listOf(
+            RepoListing(
+                "fakerepo", "This is fake", 200, "https://example.net",
+                owner = GithubUser("fake", UserType.Organization)
+            ))
+        viewModel.query = "github"
+        // Act
+
+        viewModel.submit()
+
+        // wait for and verify submit coroutine has finished
+        coVerify { viewModel.submit("github") }
+
+        // click first item
+        viewModel.resultItemClicked(0)
+
+        val events: MutableList<ViewModelEvents> = mutableListOf()
+        verify { nopConsumer(capture(events)) }
+        assertThat(events.any { it is PreloadTopLink })
+        assertThat((events.find{ it is PreloadTopLink } as PreloadTopLink).url).isEqualTo("https://example.net")
     }
 
     @Test
@@ -165,6 +191,25 @@ class GithubSearchViewModelTest {
         // click first item
         viewModel.resultItemClicked(0)
         verify(exactly = 0) { nopConsumer(any<LoadGithubPage>()) }
+    }
+
+    @Test
+    fun `Loading bar should be displayed on sending a query`() {
+        mockReposByStars = listOf(
+            RepoListing(
+                "fakerepo", "This is fake", 200, "https://example.net",
+                owner = GithubUser("fake", UserType.Organization)
+            ))
+        var boolSpy = spyk(false)
+        // Arrange
+        viewModel.query = "github"
+        // Act
+        viewModel.submit()
+
+        // wait for and verify submit coroutine has finished
+        coVerify { viewModel.submit("github") }
+        verify { viewModel.isLoading = true }
+        verify { viewModel.isLoading = false }
     }
 
     @Test

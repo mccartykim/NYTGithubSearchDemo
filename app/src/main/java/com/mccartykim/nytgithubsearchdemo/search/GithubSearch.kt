@@ -1,6 +1,7 @@
 package com.mccartykim.nytgithubsearchdemo.search
 
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.squareup.moshi.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -11,17 +12,13 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okio.IOException
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
     // Since this is using a hardcoded string I know is a valid URL,
     // and I'm in a hurry, I'd rather this fatally crash with a doublebang so I can fix it now
     // Were this based on arbitrary or third-party info, I'd be more disciplined
     private val baseUrl: HttpUrl = GITHUB_HOST_BASE_URL.toHttpUrlOrNull()!!
-
-
-    // Idea: predictive search for orgnames? Limit reqs to less than 10/minute, perhaps using interceptor. Might be a nice RxJava idea
-    // We can't search by prefix, but we could instead get the 1,000 most popular orgs, and populate a list or trie or something like that with them
 
     /**
      * Get organizations that own the most popular repositories
@@ -38,9 +35,7 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
         val moshi = Moshi.Builder().build()
         val adapter: JsonAdapter<RepoSearchResults> = RepoSearchResultsJsonAdapter(moshi)
 
-        val response = withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute()
-        }
+        val response = executeRequest(request)
 
         val repos = getModelFromResponse(adapter, response)?.items?:emptyList()
         return repos.map { it.owner }.filter { it.type == UserType.Organization }.distinctBy { it.login }
@@ -57,21 +52,46 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
         val moshi = Moshi.Builder().build()
         val adapter: JsonAdapter<RepoSearchResults> = RepoSearchResultsJsonAdapter(moshi)
 
-        val response = withContext(Dispatchers.IO) {
-            httpClient.newCall(request).execute()
-        }
+        val response = executeRequest(request)
 
         return getModelFromResponse(adapter, response)?.items?: emptyList()
+    }
+
+    private var lastCall: Long = System.currentTimeMillis() - DELAY
+    private val requestQueued: AtomicBoolean = AtomicBoolean(false)
+
+    @VisibleForTesting
+    suspend fun executeRequest(request: Request): Response? {
+        val timeSinceLastCall = System.currentTimeMillis() - lastCall
+        val response = when {
+            timeSinceLastCall > DELAY && !requestQueued.get() -> {
+                val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+                lastCall = System.currentTimeMillis()
+                response
+            }
+            requestQueued.compareAndSet(false, true) -> {
+                delay(DELAY - timeSinceLastCall)
+                val response = withContext(Dispatchers.IO) { httpClient.newCall(request).execute() }
+                requestQueued.compareAndSet(true, false)
+                lastCall = System.currentTimeMillis()
+                response
+            }
+            else -> {
+                null
+            }
+        }
+        return response
     }
 
     /**
      * @return T associated with JsonAdapter, or null if status code says resource isn't found
      */
-    private suspend fun <T>getModelFromResponse(adapter: JsonAdapter<T>, response: Response): T? {
+    private suspend fun <T>getModelFromResponse(adapter: JsonAdapter<T>, response: Response?): T? {
         response.use {
-            val body = response.body
+            val body = response?.body
             return withContext(Dispatchers.IO) {
                 when {
+                    response == null -> throw IOException("-1 rate limited")
                     response.isSuccessful && body != null -> {
                         body.use {
                             JsonReader.of(it.source()).use { reader ->
@@ -153,5 +173,8 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
 
     companion object {
         const val GITHUB_HOST_BASE_URL = "https://api.github.com/"
+        // Github Rate Limit is 10 requests per minute, with a period of 6000 ms,
+        // this is a cooldown period to get the average closer to that
+        const val DELAY = 2000L
     }
 }
