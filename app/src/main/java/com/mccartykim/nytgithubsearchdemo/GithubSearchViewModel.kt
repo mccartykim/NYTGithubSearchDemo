@@ -14,7 +14,7 @@ class GithubSearchViewModel: BaseObservable() {
     @VisibleForTesting
     var searcher = GithubSearch()
 
-    val viewModelSubject: PublishSubject<ViewModelEvents> = PublishSubject.create()
+    val viewModelSubject: PublishSubject<ViewModelEvent> = PublishSubject.create()
 
     @get: Bindable
     var suggestedOrgs: List<String> = emptyList()
@@ -125,7 +125,7 @@ class GithubSearchViewModel: BaseObservable() {
 }
 
 
-sealed class ViewModelEvents
-class Warning(val warning: String): ViewModelEvents()
-class PreloadTopLink(val url: String): ViewModelEvents()
-class LoadGithubPage(val url: String): ViewModelEvents()
+sealed class ViewModelEvent
+class Warning(val warning: String): ViewModelEvent()
+class PreloadTopLink(val url: String): ViewModelEvent()
+class LoadGithubPage(val url: String): ViewModelEvent()

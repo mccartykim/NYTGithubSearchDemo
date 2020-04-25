@@ -2,7 +2,6 @@ package com.mccartykim.nytgithubsearchdemo
 
 import com.mccartykim.nytgithubsearchdemo.search.*
 import io.mockk.*
-import io.mockk.impl.annotations.SpyK
 import kotlinx.coroutines.runBlocking
 import okio.IOException
 import org.assertj.core.api.Assertions.assertThat
@@ -18,7 +17,7 @@ class GithubSearchViewModelTest {
         coEvery { getReposByStars(any(), any()) } answers { mockReposByStars }
         coEvery { getMostPopularOrgs(any()) } answers { mockMostPopularOrgs }
     }
-    private val nopConsumer: (ViewModelEvents) -> Unit = spyk({ _: ViewModelEvents -> })
+    private val nopConsumer: (ViewModelEvent) -> Unit = spyk({ _: ViewModelEvent -> })
     private val viewModel = spyk(GithubSearchViewModel())
 
     @Before
@@ -114,7 +113,7 @@ class GithubSearchViewModelTest {
         // click first item
         viewModel.resultItemClicked(0)
 
-        val events: MutableList<ViewModelEvents> = mutableListOf()
+        val events: MutableList<ViewModelEvent> = mutableListOf()
         verify { nopConsumer(capture(events)) }
         assertThat(events.any { it is LoadGithubPage })
         assertThat((events.find{ it is LoadGithubPage } as LoadGithubPage).url).isEqualTo("https://example.net")
@@ -139,7 +138,7 @@ class GithubSearchViewModelTest {
         // click first item
         viewModel.resultItemClicked(0)
 
-        val events: MutableList<ViewModelEvents> = mutableListOf()
+        val events: MutableList<ViewModelEvent> = mutableListOf()
         verify { nopConsumer(capture(events)) }
         assertThat(events.any { it is PreloadTopLink })
         assertThat((events.find{ it is PreloadTopLink } as PreloadTopLink).url).isEqualTo("https://example.net")
