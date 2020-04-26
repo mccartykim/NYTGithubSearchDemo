@@ -127,6 +127,17 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
             .build()
     }
 
+    private fun buildMostPopularReposSearchPath(count: Int): HttpUrl =
+        baseUrl.newBuilder()
+            .addPathSegment("search")
+            .addPathSegment("repositories")
+            .addQueryParameter("q", "stars:>1000")
+            .addQueryParameter("sort", "stars")
+            .addQueryParameter("order", "desc")
+            .addQueryParameter("per_page", count.toString())
+            .build()
+
+    /*
     // Dead code left to show earlier approach, before I read more about the options with Github's search API
     // I realized it's better to trust the API to deliver correct and sorted repos, assuming I rate-limit my requests
 
@@ -161,15 +172,7 @@ class GithubSearch(private val httpClient: OkHttpClient = OkHttpClient()) {
             .addPathSegment("repos")
             .build()
 
-    private fun buildMostPopularReposSearchPath(count: Int): HttpUrl =
-        baseUrl.newBuilder()
-            .addPathSegment("search")
-            .addPathSegment("repositories")
-            .addQueryParameter("q", "stars:>1000")
-            .addQueryParameter("sort", "stars")
-            .addQueryParameter("order", "desc")
-            .addQueryParameter("per_page", count.toString())
-            .build()
+     */
 
     companion object {
         const val GITHUB_HOST_BASE_URL = "https://api.github.com/"
